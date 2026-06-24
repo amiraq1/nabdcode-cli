@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+*.db
+.env
+.nabd_vectors.json
+.nabd_vocab.json
+.nabd_memory.json
+nabdcode/knowledge/
+*.egg-info/
+nabdcode/ui/__pycache__/
+# Cache and Logs
+__pycache__/
+*.pkl
+*.log
+
+# Backups
+*.bak
+*.bak_*
+
+# Configs
+config.toml
+config.toml
+.env
+*.corrupted
+.nabd_index_cache.json

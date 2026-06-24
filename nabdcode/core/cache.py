@@ -1,0 +1,2 @@
+class SemanticCache:
+    pass

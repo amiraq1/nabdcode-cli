@@ -1,0 +1,180 @@
+{
+  "accepted": [
+    {
+      "prompt": "فحص الكود",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782155763.9588668
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782155846.0346863
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782155881.2987568
+    },
+    {
+      "prompt": "اعطيني تقرير",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782155911.4516664
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782155938.0665555
+    },
+    {
+      "prompt": "اين تقرير",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782155959.0428128
+    },
+    {
+      "prompt": "افحص المستودع واعطيني تقرير",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156510.8058171
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156659.252404
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156712.7910707
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156723.091962
+    },
+    {
+      "prompt": "نفذ الأمر التالي مباشرة عبر execute_shell وبدون استخدام kwargs معقدة: ls -la ثم اكتب لي التقرير الحقيقي بناءً على أسماء الملفات التي ستظهر لك في النتي",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156854.264299
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156873.0590749
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156895.571282
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782156931.6708114
+    },
+    {
+      "prompt": "فحث المستودع",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157070.0835955
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157104.6842391
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157118.9188716
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157139.0397105
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157169.2680287
+    },
+    {
+      "prompt": "اءتمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157181.3580275
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157199.0772653
+    },
+    {
+      "prompt": "افحص لي مشروع وقدم تقرير",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157641.1729047
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157657.8427212
+    },
+    {
+      "prompt": "استمر",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782157682.9395914
+    },
+    {
+      "prompt": "hi",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782162507.9032567
+    },
+    {
+      "prompt": "فحص عميق",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782165497.2166831
+    },
+    {
+      "prompt": "افحص لي المود",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782165880.2151444
+    },
+    {
+      "prompt": "تقرير مامل",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782166300.4282553
+    },
+    {
+      "prompt": "اريد فحص المستودع",
+      "language": "unknown",
+      "task_type": "general",
+      "timestamp": 1782168012.2060766
+    }
+  ],
+  "edited": [],
+  "rejected": []
+}

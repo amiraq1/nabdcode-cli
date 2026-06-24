@@ -1,0 +1,12 @@
+python-dotenv
+requests
+rich
+arabic-reshaper
+python-bidi
+numpy
+beautifulsoup4
+toml
+httpx
+openai
+anthropic
+trafilatura

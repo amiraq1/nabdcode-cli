@@ -1,0 +1,9 @@
+{
+  "provider": {
+    "openai": {
+      "apiKey": "{env:OPENMODEL_API_KEY}",
+      "baseURL": "https://api.openmodel.ai/v1"
+    }
+  },
+  "model": "openai/deepseek-v4-flash"
+}

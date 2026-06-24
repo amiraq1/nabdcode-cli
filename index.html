@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NabdCode CLI Terminal</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body style="margin:0; padding:0; background:#0d1117;">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const CYAN = "#00f5d4";
+        const GREEN = "#39ff14";
+        const AMBER = "#ffb703";
+        const RED = "#ff4d6d";
+        const PURPLE = "#b48ead";
+        const DIM = "#4a5568";
+        const BG = "#0d1117";
+        const SURFACE = "#161b22";
+        const BORDER = "#21262d";
+
+        // ... [نفس كود المكون والمنطق اللوني الفاخر الذي صممته] ...
+        function NabdTerminal() {
+            const [input, setInput] = React.useState("");
+            const [status, setStatus] = React.useState("🔴 OFFLINE");
+
+            // فحص حالة سيرفر بايثون (8000) كل 3 ثوانٍ حياً
+            React.useEffect(() => {
+                const checkHealth = () => {
+                    fetch("http://localhost:8000/api/health")
+                        .then(res => { if(res.ok) setStatus("🟢 ONLINE"); })
+                        .catch(() => setStatus("🔴 OFFLINE"));
+                };
+                checkHealth();
+                const interval = setInterval(checkHealth, 3000);
+                return () => clearInterval(interval);
+            }, []);
+
+            return (
+                <div style={{minHeight:"100vh", background:BG, color:"#fff", fontFamily:"monospace", padding:"20px", display:"flex", justifyContent:"center", alignItems:"center"}}>
+                    <div style={{width:"100%", maxWidth:"720px", background:SURFACE, border:`1px solid ${BORDER}`, borderRadius:"8px", padding:"20px", boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+                        <div style={{display:"flex", justifyContent:"space-between", borderBottom:`1px solid ${BORDER}`, paddingBottom:"10px", marginBottom:"15px"}}>
+                            <span style={{color:CYAN, fontWeight:"bold"}}>◆ NabdCode CLI Agent — نبض</span>
+                            <span style={{color: status.includes("🟢") ? GREEN : RED, fontWeight:"bold"}}>{status}</span>
+                        </div>
+                        <div style={{minHeight:"300px", color:"#8899aa"}}>
+                            ◈ مستعد ومؤمن بالكامل. ابدأ الكتابة بالأسفل لإرسال الأوامر تلقائياً للنواة...
+                        </div>
+                        <div style={{borderTop:`1px solid ${BORDER}`, paddingTop:"10px", display:"flex", gap:"10px"}}>
+                            <span style={{color:CYAN}}>›</span>
+                            <input 
+                                value={input} 
+                                onChange={e => setInput(e.target.value)}
+                                placeholder="اسأل نبض عن الكود البرمجي..." 
+                                style={{flex:1, background:"transparent", border:"none", outline:"none", color:"#fff"}}
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<NabdTerminal />);
+    </script>
+</body>
+</html>
