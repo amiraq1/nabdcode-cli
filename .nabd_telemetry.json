@@ -1,0 +1,31 @@
+{
+    "total_calls": 22,
+    "successes": 14,
+    "failures": 8,
+    "tools": {
+        "shell": {
+            "calls": 17,
+            "successes": 14,
+            "failures": 3,
+            "total_latency": 1.3659470081329346
+        },
+        "write": {
+            "calls": 0,
+            "successes": 0,
+            "failures": 0,
+            "total_latency": 0.0
+        },
+        "patch": {
+            "calls": 0,
+            "successes": 0,
+            "failures": 0,
+            "total_latency": 0.0
+        },
+        "web": {
+            "calls": 5,
+            "successes": 0,
+            "failures": 5,
+            "total_latency": 1.1134819984436035
+        }
+    }
+}

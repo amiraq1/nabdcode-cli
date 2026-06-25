@@ -14,8 +14,16 @@ logger = logging.getLogger(__name__)
 class ModelManager:
     """محرك التوجيه الذكي للتواصل عبر خادم الوكيل المحلي مع تبديل تلقائي (Failover)"""
     
-    def __init__(self, config_path: str = "config.toml"):
+    def __init__(self, config_path: Optional[str] = None):
         try:
+            if config_path is None:
+                from pathlib import Path
+                base_dir = Path(__file__).resolve().parent.parent.parent
+                config_path_obj = base_dir / "config.toml"
+                if not config_path_obj.exists():
+                    config_path_obj = Path(__file__).resolve().parent / "config.toml"
+                config_path = str(config_path_obj)
+                
             self.config = toml.load(config_path)
             logger.info("Configuration loaded successfully.")
         except Exception as e:

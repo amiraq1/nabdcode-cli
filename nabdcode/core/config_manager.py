@@ -34,11 +34,16 @@ class ConfigManager:
     def __init__(self, config_path: str | None = None):
         self._token_cache = {}
         if config_path is None:
-            # Fallback: check if config.toml exists in current working directory, else use user's home configuration
-            if os.path.exists("config.toml"):
-                self.config_path = Path("config.toml")
+            # Fallback: check if config.toml exists in the tool's installation directory
+            base_dir = Path(__file__).resolve().parent.parent.parent
+            local_config = base_dir / "config.toml"
+            if not local_config.exists():
+                local_config = Path(__file__).resolve().parent / "config.toml"
+            
+            if local_config.exists():
+                self.config_path = local_config
             else:
-                self.config_path = Path.home() / ".config" / "nabdcode" / "config.json"
+                self.config_path = Path.home() / ".config" / "nabdcode" / "config.toml"
         else:
             self.config_path = Path(config_path)
 

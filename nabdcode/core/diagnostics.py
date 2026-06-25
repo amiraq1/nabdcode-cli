@@ -21,12 +21,20 @@ class SystemDiagnostics:
     4. سلامة ذاكرة RAG المتجهة (Vector DB) ومطابقة الأبعاد.
     5. الاتصال بالشبكة وخوادم مزودي الخدمة (LLM Providers).
     """
-    def __init__(self, config_path="config.toml", db_path="nabd_memory.db", vector_path=".nabd_vectors.pkl", vocab_path=".nabd_vocab.json"):
+    def __init__(self, config_path=None, db_path=None, vector_path=None, vocab_path=None):
+        from pathlib import Path
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        if config_path is None:
+            c_path = base_dir / "config.toml"
+            if not c_path.exists():
+                c_path = Path(__file__).resolve().parent / "config.toml"
+            config_path = str(c_path) if c_path.exists() else "config.toml"
+            
         self.config_path = config_path
-        self.db_path = db_path
-        self.vector_path = vector_path
-        self.vocab_path = vocab_path
-        self.config_manager = TomlConfigManager(config_path)
+        self.db_path = db_path or str(base_dir / "nabd_memory.db")
+        self.vector_path = vector_path or str(base_dir / ".nabd_vectors.pkl")
+        self.vocab_path = vocab_path or str(base_dir / ".nabd_vocab.json")
+        self.config_manager = TomlConfigManager(self.config_path)
 
     def run_all_checks(self) -> dict:
         results = {

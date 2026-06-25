@@ -1,0 +1,394 @@
+Created At: 2026-06-25T07:09:30Z
+Completed At: 2026-06-25T07:09:30Z
+File Path: `file:///data/data/com.termux/files/home/nabdcode-cli/nabdcode/core/agent.py`
+Total Lines: 386
+Total Bytes: 19786
+Showing lines 1 to 386
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: """
+2: nabdcode/core/agent.py
+3: نواة الوكيل الذكي — REAct loop مع text-based file mutations,
+4: auto-correction, وحماية syntax بـ py_compile، ودعم القراءة التلقائية الذاتية.
+5: """
+6: import asyncio
+7: import logging
+8: import py_compile
+9: import re
+10: import sys
+11: import os
+12: from typing import Any, Dict, List, Optional, Tuple
+13: 
+14: from rich.console import Console
+15: from rich.live import Live
+16: from rich.markup import escape
+17: from rich.text import Text
+18: 
+19: from nabdcode.core.file_tool import NabdFileEngine
+20: from nabdcode.core.message_healer import (
+21:     limit_context,
+22:     merge_consecutive_same_role,
+23:     validate_tool_messages,
+24: )
+25: from nabdcode.core.streaming_parser import NabdStreamingThinkParser
+26: from nabdcode.core.web_search import NabdWebSearch
+27: 
+28: console = Console(file=sys.__stdout__)
+29: logger  = logging.getLogger(__name__)
+30: 
+31: # ── ثوابت ────────────────────────────────────────────────────────────────────
+32: MAX_CORRECTION_ATTEMPTS = 3
+33: MAX_CONTEXT_MESSAGES    = 25
+34: 
+35: _CONVERSATIONAL_TRIGGERS = frozenset({
+36:     "hi", "hello", "hey", "who are you", "thanks",
+37:     "thank you", "ok", "okay", "مرحبا", "شكرا", "اهلا"
+38: })
+39: 
+40: _HIDDEN_MARKERS = frozenset({
+41:     "<<< FILE_WRITE:", "<<< SEARCH_REPLACE:", "<<< READ:", "<<< WEB_SEARCH:", "<<< SHELL >>>", "<<< SHELL_END >>>",
+42:     "<<<<<<< SEARCH", "=======", ">>>>>>> REPLACE", "<<< FILE_END >>>", ">>>"
+43: })
+44: 
+45: _SYSTEM_PROMPT = (
+46:     "You are Nabd OS, an elite autonomous AI agent inside Termux. "
+47:     "You have full system authority to mutate files.\n\n"
+48: 
+49:     "Choose the correct block based on the scenario:\n\n"
+50: 
+51:     "1. FOR NEW FILES:\n"
+52:     "<<< FILE_WRITE: path/file.py >>>\n"
+53:     "complete code here\n"
+54:     "<<< FILE_END >>>\n\n"
+55: 
+56:     "2. FOR EXISTING FILES (PREFERRED — preserves architecture):\n"
+57:     "If you don't know the exact file structure, you MUST issue a READ block first to fetch it:\n"
+58:     "<<< READ: path/file.py >>>\n"
+59:     "Once you have the content, use the SEARCH_REPLACE block:\n"
+60:     "<<< SEARCH_REPLACE: path/file.py >>>\n"
+61:     "<<<<<<< SEARCH\n"
+62:     "exact old code block\n"
+63:     "=======\n"
+64:     "new code block\n"
+65:     ">>>>>>> REPLACE\n"
+66:     "<<< FILE_END >>>\n\n"
+67: 
+68:     "3. FOR FETCHING LIVE WEB DATA OR API DOCUMENTATION:\n"
+69:     "If you need up-to-date documentation, latest library structures, or solutions to network errors, issue a WEB_SEARCH block:\n"
+70:     "<<< WEB_SEARCH: your search query here >>>\n"
+71:     "The system will return live snippets. Use them to write exact code.\n\n"
+72: 
+73:     "4. MANDATORY RUN POLICY:\n"
+74:     "Whenever you write or modify a Python (.py) file, you MUST immediately issue a SHELL block to test it:\n"
+75:     "<<< SHELL >>>\n"
+76:     "python3 path/file.py\n"
+77:     "<<< SHELL_END >>>\n"
+78:     "Never skip execution or say 'I will run it later'. Execute it now to verify your changes.\n\n"
+79: 
+80:     "CRITICAL RETRY POLICY:\n"
+81:     "- If you receive '[GUARD] Diff Error: Target SEARCH block not found', "
+82:     "do NOT fall back to FILE_WRITE with truncated or hallucinated code.\n"
+83:     "- Fix the SEARCH block to match the file exactly, "
+84:     "or issue a <<< READ: path/file.py >>> block again to re-verify contents.\n"
+85:     "- Preserve all surrounding functions and classes at all costs."
+86: )
+87: 
+88: 
+89: # ── helpers ───────────────────────────────────────────────────────────────────
+90: 
+91: def _is_conversational(text: str) -> bool:
+92:     return len(text) < 20 and any(t in text.lower() for t in _CONVERSATIONAL_TRIGGERS)
+93: 
+94: 
+95: def _render_agent_box(current_text: str) -> Text:
+96:     """يحوّل نص الرد الخام إلى Rich Text مع إخفاء markers الأدوات."""
+97:     lines_out: List[str] = []
+98: 
+99:     for line in current_text.split("\n"):
+100:         stripped = line.strip()
+101: 
+102:         if any(marker in stripped for marker in _HIDDEN_MARKERS):
+103:             continue
+104: 
+105:         if stripped.startswith("[THOUGHT]"):
+106:             content = stripped[len("[THOUGHT]"):].strip()
+107:             lines_out.append(f"[italic grey50]* Thought -> {escape(content)}[/italic grey50]")
+108:         elif stripped.startswith("[READ]"):
+109:             content = stripped[len("[READ]"):].strip()
+110:             lines_out.append(f"[bold white on purple] READ [/bold white on purple] [cyan]{escape(content)}[/cyan]")
+111:         elif stripped.startswith("[SHELL]"):
+112:             content = stripped[len("[SHELL]"):].strip()
+113:             lines_out.append(f"[bold white on #1e3a8a] SHELL [/bold white on #1e3a8a] [green]{escape(content)}[/green]")
+114:         elif stripped.startswith("[EDIT]"):
+115:             content = stripped[len("[EDIT]"):].strip()
+116:             lines_out.append(f"[bold white on #2563eb] EDIT [/bold white on #2563eb] [white]{escape(content)}[/white]")
+117:         elif stripped.startswith("[SEARCH]"):
+118:             content = stripped[len("[SEARCH]"):].strip()
+119:             lines_out.append(f"[bold white on #059669] SEARCH [/bold white on #059669] [green]{escape(content)}[/green]")
+120:         else:
+121:             lines_out.append(f"[white]{escape(line)}[/white]")
+122: 
+123:     return Text.from_markup("\n".join(lines_out))
+124: 
+125: 
+126: def _compile_check(file_path: str) -> Optional[str]:
+127:     if not file_path.endswith(".py"):
+128:         return None
+129:     try:
+130:         py_compile.compile(file_path, doraise=True)
+131:         return None
+132:     except py_compile.PyCompileError as exc:
+133:         return exc.msg
+134: 
+135: 
+136: def _extract_write_blocks(response: str) -> List[Tuple[str, str]]:
+137:     return re.findall(r"<<<\s*FILE_WRITE:\s*(.*?)\s*>>>(.*?)<<<\s*FILE_END\s*>>>", response, re.DOTALL)
+138: 
+139: 
+140: def _extract_sr_blocks(response: str) -> List[Tuple[str, str]]:
+141:     return re.findall(r"<<<\s*SEARCH_REPLACE:\s*(.*?)\s*>>>(.*?)<<<\s*FILE_END\s*>>>", response, re.DOTALL)
+142: 
+143: def _extract_read_blocks(response: str) -> List[str]:
+144:     return re.findall(r"<<<\s*READ:\s*(.*?)\s*>>>", response, re.DOTALL)
+145: 
+146: def _extract_shell_blocks(response: str) -> List[str]:
+147:     return re.findall(r"<<<\s*SHELL\s*>>>(.*?)<<<\s*SHELL_END\s*>>>", response, re.DOTALL)
+148: 
+149: def _extract_search_blocks(response: str) -> List[str]:
+150:     return re.findall(r"<<<\s*WEB_SEARCH:\s*(.*?)\s*>>>", response, re.DOTALL)
+151: 
+152: 
+153: # ── الوكيل ────────────────────────────────────────────────────────────────────
+154: 
+155: class NabdAgent:
+156:     def __init__(self, provider: Any, registry: Any = None) -> None:
+157:         self.provider = provider
+158:         self.registry = registry
+159: 
+160:     async def _stream_response(self, messages: List[Dict[str, Any]], cfg: Any) -> str:
+161:         pipeline = validate_tool_messages(merge_consecutive_same_role(limit_context(messages, MAX_CONTEXT_MESSAGES)))
+162:         parser         = NabdStreamingThinkParser()
+163:         response_parts: List[str] = []
+164: 
+165:         console.print("[bold green]🚀 Starting reactive generation...[/bold green]\n")
+166: 
+167:         with Live(_render_agent_box(""), refresh_per_second=10, console=console) as live:
+168:             def _update(chunk: str) -> None:
+169:                 response_parts.append(chunk)
+170:                 live.update(_render_agent_box("".join(response_parts)))
+171: 
+172:             async for item in self.provider.generate_stream(pipeline, cfg, None):
+173:                 if item.get("type") == "content":
+174:                     parser.feed(item.get("chunk", ""), getattr(cfg, "thinking_enabled", False), _update, lambda x: None)
+175:             parser.flush(_update, lambda x: None)
+176:             live.update(_render_agent_box("".join(response_parts)))
+177: 
+178:         return "".join(response_parts)
+179: 
+180:     def _apply_mutations(self, response: str, messages: List[Dict[str, Any]]) -> Tuple[bool, str]:
+181:         """يطبّق كتل التعديل، والأوامر، وقراءة الملفات مع التغذية الراجعة الذاتية للتكامل المفتوح."""
+182:         write_blocks  = _extract_write_blocks(response)
+183:         sr_blocks     = _extract_sr_blocks(response)
+184:         read_blocks   = _extract_read_blocks(response)
+185:         shell_blocks  = _extract_shell_blocks(response)
+186:         search_blocks = _extract_search_blocks(response)
+187: 
+188:         if not write_blocks and not sr_blocks and not read_blocks and not shell_blocks and not search_blocks:
+189:             return True, ""
+190: 
+191:         # ── 🚨 فخ التفتيش والتشغيل الإجباري (Mandatory Execution Guard) ──────────────────
+192:         # إذا تم كشف عملية كتابة أو تعديل لملف بايثون، ولم يتم إرفاق أمر تشغيل Shell
+193:         has_python_mutation = any(p.endswith(".py") for p, _ in write_blocks) or any(p.endswith(".py") for p, _ in sr_blocks)
+194:         if has_python_mutation and not shell_blocks:
+195:             console.print("\n[bold white on #b91c1c] 🚫 EXECUTION GUARD ALERT [/bold white on #b91c1c] [red]Model tried to skip testing the code![/red]")
+196:             return False, "[GUARD] Procedural Error: You wrote/modified Python code but failed to provide a <<< SHELL >>> execution block. You MUST execute the script using a SHELL block to verify there are no ModuleNotFoundError or syntax collapses."
+197: 
+198:         console.print("\n[bold yellow]⚡ Executing physical code mutations & tools...[/bold yellow]")
+199:         all_passed   = True
+200:         error_report = ""
+201: 
+202:         # ── 1. بروتوكول القراءة الآلية (Automated READ Protocol) ─────────────────
+203:         for raw_path in read_blocks:
+204:             path = raw_path.strip()
+205:             if os.path.exists(path):
+206:                 try:
+207:                     with open(path, "r", encoding="utf-8") as f:
+208:                         file_content = f.read()
+209:                     console.print(f"[bold white on purple] READ AUTO [/bold white on purple] [bold green]✔ Loaded -> {path}[/bold green]")
+210:                     # حقن البيانات في الجلسة وإجبار النواة على إكمال الدورة في المحاولة التالية
+211:                     messages.append({
+212:                         "role": "user",
+213:                         "content": f"[SYSTEM FEEDBACK] Read successful. Here is the current content of '{path}':\n\n{file_content}\n\nNow issue your SEARCH_REPLACE block based on this state."
+214:                     })
+215:                     all_passed = False # لضمان استمرار الـ Auto-Correction Loop
+216:                 except Exception as exc:
+217:                     all_passed    = False
+218:                     error_report += f"Read Error → {path}: {exc}\n"
+219:             else:
+220:                 all_passed    = False
+221:                 error_report += f"Read Error → {path}: File does not exist\n"
+222: 
+223:         # ── 1.5 WEB_SEARCH ───────────────────────────────────────────────────
+224:         for raw_query in search_blocks:
+225:             query = raw_query.strip()
+226:             if not query:
+227:                 continue
+228:                 
+229:             console.print(f"[bold white on #0d9488] WEB SEARCH [/bold white on #0d9488] [cyan]🔍 Searching for: '{query}'[/cyan]")
+230:             try:
+231:                 from nabdcode.core.web_search import NabdWebSearch
+232:                 search_results = NabdWebSearch.search(query)
+233:                 
+234:                 # صياغة تقرير المخرجات لحقنه في ذاكرة الجلسة
+235:                 feedback = f"[SYSTEM FEEDBACK] Web search results for '{query}':\n\n"
+236:                 for idx, res in enumerate(search_results, 1):
+237:                     if "error" in res:
+238:                         feedback += f"Error: {res['error']}\n"
+239:                     else:
+240:                         feedback += f"[{idx}] {res['title']}\nURL: {res['url']}\nSnippet: {res['snippet']}\n\n"
+241:                 
+242:                 console.print(f"[bold green]✔ Search Done:[/bold green] Found {len(search_results)} live results.")
+243:                 
+244:                 # إرجاع المخرجات للنموذج وإجبار الحلقة على الاستمرار لتحليل البيانات
+245:                 messages.append({
+246:                     "role": "user",
+247:                     "content": feedback + "Now analyze these results and write/modify the code accordingly."
+248:                 })
+249:                 all_passed = False # لمواصلة حلقة التصحيح الذاتي والتوليد
+250:             except Exception as exc:
+251:                 all_passed = False
+252:                 error_report += f"Web Search Exception: {str(exc)}\n"
+253: 
+254:         # ── 2. FILE_WRITE ────────────────────────────────────────────────────
+255:         for raw_path, code in write_blocks:
+256:             path   = raw_path.strip()
+257:             result = NabdFileEngine.safe_write(path, code.strip())
+258: 
+259:             if result.get("success"):
+260:                 err = _compile_check(path)
+261:                 if err:
+262:                     all_passed    = False
+263:                     error_report += f"Syntax Error in new file '{path}': {err}\n"
+264:                     console.print(f"[bold white on red] GUARD [/bold white on red] [bold red]❌ Syntax Error → {path}: {err}[/bold red]")
+265:                 else:
+266:                     console.print(f"[bold white on green] GUARD [/bold white on green] [bold green]✔ Created → {path}[/bold green]")
+267:             else:
+268:                 all_passed    = False
+269:                 error_report += f"Write Error → {path}: {result.get('error')}\n"
+270: 
+271:         # ── 3. SEARCH_REPLACE ────────────────────────────────────────────────
+272:         for raw_path, block in sr_blocks:
+273:             path  = raw_path.strip()
+274:             match = re.search(r"<<<<<<<\s*SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>>\s*REPLACE", block, re.DOTALL)
+275: 
+276:             if not match:
+277:                 all_passed    = False
+278:                 error_report += f"Critical: Invalid SEARCH/REPLACE block format for {path}\n"
+279:                 console.print(f"[bold white on red] DIFF ERROR [/bold white on red] [red]Failed to parse block for {path}[/red]")
+280:                 continue
+281: 
+282:             search_str, replace_str = match.group(1), match.group(2)
+283:             result = NabdFileEngine.apply_search_replace(path, search_str, replace_str)
+284: 
+285:             if result.get("success"):
+286:                 err = _compile_check(path)
+287:                 if err:
+288:                     all_passed    = False
+289:                     error_report += f"Syntax Error after patch '{path}': {err}\n"
+290:                     console.print(f"[bold white on red] GUARD [/bold white on red] [bold red]❌ Patch Syntax Error → {path}: {err}[/bold red]")
+291:                 else:
+292:                     console.print(f"[bold white on green] GUARD [/bold white on green] [bold green]✔ Patch Applied → {path}[/bold green]")
+293:             else:
+294:                 all_passed    = False
+295:                 error_report += f"Diff Error → {path}: {result.get('error')}\n"
+296: 
+297:         # ── 4. SHELL RUN ─────────────────────────────────────────────────────
+298:         for raw_cmd in shell_blocks:
+299:             cmd = raw_cmd.strip()
+300:             if not cmd:
+301:                 continue
+302:             console.print(f"[bold white on #1e3a8a] SHELL RUN [/bold white on #1e3a8a] [green]$ {cmd}[/green]")
+303:             try:
+304:                 import subprocess
+305:                 res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+306:                 if res.returncode == 0:
+307:                     console.print(f"[bold green]✔ Success:[/bold green]\n[grey70]{res.stdout.strip()}[/grey70]")
+308:                     # توثيق Git Checkpoint خفي عند النجاح الكامل
+309:                     subprocess.run(f"git add {path} && git commit -m 'NabdCode: Auto-checkpoint - [Success] mutated {path}'", shell=True, capture_output=True)
+310:                     console.print("[grey50]📁 Git Checkpoint Created[/grey50]")
+311:                 else:
+312:                     all_passed    = False
+313:                     error_report += f"Runtime Error in command '{cmd}':\n{res.stderr}\n"
+314:                     console.print(f"[bold white on red] RUNTIME ERROR [/bold white on red]\n[red]{res.stderr.strip()}[/red]")
+315:             except subprocess.TimeoutExpired:
+316:                 all_passed    = False
+317:                 error_report += f"Timeout Error: Command '{cmd}' exceeded 15s limit.\n"
+318:                 console.print("[bold red]❌ خطأ: انتهت مهلة تشغيل الأمر (Timeout)[/bold red]")
+319:             except Exception as exc:
+320:                 all_passed    = False
+321:                 error_report += f"Execution Exception: {str(exc)}\n"
+322: 
+323:         return all_passed, error_report
+324: 
+325:     async def process_request(self, text: str, cfg: Any) -> None:
+326:         text = text.strip()
+327:         if not text:
+328:             return
+329: 
+330:         if _is_conversational(text):
+331:             console.print(f"[bold cyan]💬 [Conversational Mode]: {text}[/bold cyan]")
+332:             from nabdcode.core.model_manager import ModelManager
+333:             mm = ModelManager()
+334:             try:
+335:                 response = await mm.generate_response_async(
+336:                     system_prompt="You are NabdCode. Answer briefly and directly.",
+337:                     messages=[{"role": "user", "content": text}],
+338:                     temperature=0.6,
+339:                 )
+340:                 console.print(f"\n[bold green]✅ Response:[/bold green] {response}")
+341:             except Exception as exc:
+342:                 console.print(f"[bold red]❌ Error: {exc}[/bold red]")
+343:             return
+344: 
+345:         console.print(f"[bold cyan]🧠 [Processing]: {text[:60]}...[/bold cyan]")
+346: 
+347:         messages: List[Dict[str, Any]] = [
+348:             {"role": "system", "content": _SYSTEM_PROMPT},
+349:             {"role": "user",   "content": text},
+350:         ]
+351: 
+352:         for attempt in range(MAX_CORRECTION_ATTEMPTS):
+353:             if attempt > 0:
+354:                 console.print(f"\n[bold yellow]🔄 [Auto-Correction Loop]: Attempt {attempt + 1}/{MAX_CORRECTION_ATTEMPTS}...[/bold yellow]")
+355: 
+356:             try:
+357:                 response = await self._stream_response(messages, cfg)
+358:             except Exception as exc:
+359:                 console.print(f"\n[bold red]❌ Generation Error: {exc}[/bold red]")
+360:                 return
+361: 
+362:             # تمرير الـ messages لـ _apply_mutations لتمكين التغذية العكسية للقراءة والأدوات
+363:             all_passed, error_report = self._apply_mutations(response, messages)
+364: 
+365:             if all_passed:
+366:                 break
+367: 
+368:             # إذا لم تكن هناك أخطاء مسجلة ولكن all_passed=False (حالة قراءة ناجحة)، نقوم بحقن الرد فقط لمواصلة الحلقة
+369:             if not error_report:
+370:                 messages.append({"role": "assistant", "content": response})
+371:                 continue
+372: 
+373:             messages.append({"role": "assistant", "content": response})
+374:             messages.append({
+375:                 "role": "user",
+376:                 "content": f"[GUARD] Validation Failed:\n{error_report}\nFollow the retry policy strictly. Do NOT wipe file logic.",
+377:             })
+378:         else:
+379:             console.print(f"\n[bold red]❌ Guard Alert: Max correction attempts ({MAX_CORRECTION_ATTEMPTS}) reached.[/bold red]")
+380: 
+381:         console.print("\n[bold green]🎯 Done.[/bold green]")
+382: 
+383:     def index_workspace(self, *args: Any, **kwargs: Any) -> None: pass
+384:     @property
+385:     def llm_client(self) -> Any: return self.provider
+386: 
+The above content shows the entire, complete file contents of the requested file.

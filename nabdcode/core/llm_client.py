@@ -90,8 +90,14 @@ class NabdLLMClient:
         
         try:
             import toml
-            if os.path.exists("config.toml"):
-                with open("config.toml", "r", encoding="utf-8") as f:
+            from pathlib import Path
+            base_dir = Path(__file__).resolve().parent.parent.parent
+            config_path = base_dir / "config.toml"
+            if not config_path.exists():
+                config_path = Path(__file__).resolve().parent / "config.toml"
+                
+            if config_path.exists():
+                with open(config_path, "r", encoding="utf-8") as f:
                     data = toml.load(f)
                     provider = data.get("provider", provider)
                     model_name = data.get("model", model_name)

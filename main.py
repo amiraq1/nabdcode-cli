@@ -37,10 +37,16 @@ async def _initialize_agent_async():
 
     # ── قراءة config.toml ──────────────────────────────────────
     try:
-        with open("config.toml", "rb") as f:
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        config_path = base_dir / "config.toml"
+        # Since main.py is often at the root of the repo (or inside nabdcode/core/), let's handle both
+        if not config_path.exists():
+            config_path = Path(__file__).resolve().parent / "config.toml"
+            
+        with open(config_path, "rb") as f:
             full_config = tomllib.load(f)
     except Exception as e:
-        print(f"[ERROR] Failed to read config.toml: {e}")
+        print(f"[ERROR] Failed to read config.toml from {config_path}: {e}")
         full_config = {}
 
     # تحديد الـ provider النشط من [general]

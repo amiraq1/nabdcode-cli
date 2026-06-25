@@ -23,3 +23,6 @@ config.toml
 .env
 *.corrupted
 .nabd_index_cache.json
+.nabd_worktrees/
+cpython/
+apistar/
